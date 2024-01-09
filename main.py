@@ -66,12 +66,17 @@ class RainbowAttack:
     def second_reduce(self, hash) -> str:
         hash_digits = self.get_digits_from_hash(hash)
 
-        index = int(hash_digits[0:len(hash_digits):3])
+        index = int(hash_digits[::3])
 
         while index >= len(self.words):
             index %= len(self.words)
 
-        return StringHasher.hash(self.create_word(self.words[index], str("%04d" % int(hash_digits[::2][:4]))))
+        return StringHasher.hash(
+            self.create_word(
+                self.words[index],
+                str("%04d" % int(hash_digits[::2][:4]))
+            )
+        )
 
     def third_reduce(self, hash) -> str:
         hash_digits = self.get_digits_from_hash(hash)
@@ -98,23 +103,25 @@ class RainbowAttack:
         )
 
     def attack(self, iteration):
-        div = iteration / 10
+        div = iteration / 100
         for index in range(iteration):
             if (index % div == 0):
                 print(f'iteration {index}, elapsed time : {datetime.now() - self.start_date}')
 
             word = self.create_word()
+            while word in self.data['try'].keys():
+                word = self.create_word()
 
             hash = self.reduce(word)
 
             if hash in self.hash_challenges:
-                print(f'success ! Found : {word}')
                 self.data['success'][word] = hash
 
             self.data['try'][word] = hash
 
+        print('attack ended, storing..')
         JsonStorer.store(self.data['try'], file_name='try.json')
         JsonStorer.store(self.data['success'], file_name='success.json')
 
 if __name__ == '__main__':
-    rainbowAttack = RainbowAttack(50000000)
+    rainbowAttack = RainbowAttack()
