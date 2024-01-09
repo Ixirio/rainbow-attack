@@ -1,75 +1,120 @@
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from json_storer import JsonStorer
 from string_hasher import StringHasher
+from txt_file_reader import TxtFileReader
 
 class RainbowAttack:
 
-    hash_challenges = []
-    words = []
-    data = {}
+    hash_challenges : list = []
+    words : list = []
+    data : dict = {
+        'try' : {},
+        'success' : {}
+    }
 
-    attack_start_date : datetime
-    attack_end_date : datetime
+    start_date: datetime
+    attack_time: timedelta
 
     def __init__(self, iteration = 1000000) -> None:
-        self.hash_challenges = self.read_file_data('hash_challenges.txt')
-        self.words = self.read_file_data('words_ccm_2023.txt')
+        self.hash_challenges = TxtFileReader.read('hash_challenges.txt')
+        self.words = TxtFileReader.read('words_ccm_2023.txt')
 
-        self.attack_start_date = datetime.now()
+        self.start_date = datetime.now()
         self.attack(iteration)
-        
-        print(datetime.now() - self.attack_start_date)
+        self.attack_time = datetime.now() - self.start_date
+        print(self.attack_time)
 
+    def insert_digit(self, source, digit, position):
+        return source[:position] + digit + source[position:]
 
-    def read_file_data(self, fileName):
-        with open(fileName) as file:
-            return [line.strip('\n') for line in file.readlines()]
+    def interlace(self, word, numbers = None, numbers_count = 4) -> str:
+        if numbers is not None:
+            for index, number in enumerate(numbers):
+                word = self.insert_digit(word, number, index * 2 % len(word))
+            return word
 
-    def interlace(self, word, numbers = None, numbers_count = 4):
-        if numbers is None:
+        else:
             numbers = ''.join(str(random.randint(0, 9)) for _ in range(numbers_count))
 
         return ''.join(map(next, random.sample(
             [iter(word)] * len(word) + [iter(numbers)] * numbers_count, len(word) + numbers_count
         )))
+    
+    def get_digits_from_hash(self, hash) -> str:
+        return ''.join(filter(str.isdigit, hash))
 
-    def create_word(self, word = None, numbers = None):
+    def create_word(self, word = None, numbers = None) -> str:
         return self.interlace(random.choice(self.words) if word is None else word, numbers)
 
+    def first_reduce(self, hash) -> str:
+        hash_digits = self.get_digits_from_hash(hash)
 
-    def first_reduce(self, hash):
+        index = int(hash_digits) % len(self.words)
+
+        while index >= len(self.words):
+            index %= len(self.words) * 1.5
+
         return StringHasher.hash(
-            self.create_word(self.words[int(''.join(filter(str.isdigit, hash))) % len(self.words)])
+            self.create_word(
+                self.words[index],
+                str("%04d" % int(hash_digits[:4]))
+            )
         )
 
-    def second_reduce(self, hash):
-        hash_digits = ''.join(filter(str.isdigit, hash))
+    def second_reduce(self, hash) -> str:
+        hash_digits = self.get_digits_from_hash(hash)
 
-        number = int(hash_digits[0:len(hash_digits):3])
+        index = int(hash_digits[0:len(hash_digits):3])
 
-        while number > len(self.words):
-            number %= len(self.words)
+        while index >= len(self.words):
+            index %= len(self.words)
 
-        return StringHasher.hash(self.create_word(self.words[number]))
+        return StringHasher.hash(self.create_word(self.words[index], str("%04d" % int(hash_digits[::2][:4]))))
 
-    def third_reduce(self, hash):
-        return StringHasher.hash(self.create_word(None, str("%04d" % int(''.join(filter(str.isdigit, hash))[:4]))))
+    def third_reduce(self, hash) -> str:
+        hash_digits = self.get_digits_from_hash(hash)
+
+        index = int(hash_digits) % len(self.words)
+        
+        while index >= len(self.words):
+            index %= len(self.words) * 0.75
+
+        return StringHasher.hash(
+            self.create_word(
+                self.words[index],
+                str("%04d" % int(hash_digits[::3][:4]))
+            )
+        )
+
+    def reduce(self, word) -> str:
+        return self.third_reduce(
+            self.second_reduce(
+                self.first_reduce(
+                    StringHasher.hash(word)
+                )
+            )
+        )
 
     def attack(self, iteration):
-        for _ in range(iteration):
+        div = iteration / 10
+        for index in range(iteration):
+            if (index % div == 0):
+                print(f'iteration {index}, elapsed time : {datetime.now() - self.start_date}')
+
             word = self.create_word()
 
-            hash = self.third_reduce(self.second_reduce(self.first_reduce(StringHasher.hash(word))))
+            hash = self.reduce(word)
 
             if hash in self.hash_challenges:
+                print(f'success ! Found : {word}')
                 self.data['success'][word] = hash
 
-            self.data[word] = hash
+            self.data['try'][word] = hash
 
-        JsonStorer.store(self.data)
-
+        JsonStorer.store(self.data['try'], file_name='try.json')
+        JsonStorer.store(self.data['success'], file_name='success.json')
 
 if __name__ == '__main__':
-    rainbowAttack = RainbowAttack()
+    rainbowAttack = RainbowAttack(50000000)

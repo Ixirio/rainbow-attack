@@ -2,14 +2,14 @@ import json
 import os
 
 class JsonStorer:
-    def store(data = {}):
-        if not os.path.exists('data'): os.makedirs('data')
+    def store(data = {}, folder = 'data', file_name = 'data.json'):
+        if not os.path.exists(folder): os.makedirs(folder)
 
-        if not os.path.isfile('data/data.json'):
-            with open("data/data.json", "w") as file:
+        if not os.path.isfile(f'{folder}/{file_name}'):
+            with open(f'{folder}/{file_name}', "w") as file:
                 json.dump({}, file, indent=4)
 
-        with open('data/data.json', 'r+') as file:
+        with open(f'{folder}/{file_name}', 'r+') as file:
             existing_data = json.load(file)
 
             existing_data.update(data)
